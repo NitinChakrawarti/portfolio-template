@@ -37,6 +37,42 @@ function getIconHTML(iconName, className = 'icon') {
   return `<i data-lucide="${iconName}" class="${className}"></i>`;
 }
 
+// Converts Markdown-style links like [Label](https://example.com) to plain URL.
+function normalizeHref(value) {
+  if (!value || typeof value !== 'string') return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const markdownMatch = trimmed.match(/^\[[^\]]*\]\(([^)]+)\)$/);
+  if (markdownMatch && markdownMatch[1]) {
+    return markdownMatch[1].trim();
+  }
+
+  const angleMatch = trimmed.match(/^<([^>]+)>$/);
+  if (angleMatch && angleMatch[1]) {
+    return angleMatch[1].trim();
+  }
+
+  return trimmed;
+}
+
+function normalizeText(value, fallback = '') {
+  if (!value || typeof value !== 'string') return fallback;
+
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+
+  const markdownMatch = trimmed.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+  if (markdownMatch) {
+    const label = markdownMatch[1]?.trim();
+    const href = markdownMatch[2]?.trim();
+    return label || href || fallback;
+  }
+
+  return trimmed;
+}
+
 
 // ============================================
 // NAVIGATION
@@ -151,17 +187,20 @@ function initHero() {
   // Social links
   if (elements.heroSocials) {
     const socialLinks = [
-      { icon: 'github', href: profile.github, label: 'GitHub' },
-      { icon: 'linkedin', href: profile.linkedin, label: 'LinkedIn' },
-      { icon: 'mail', href: profile.email ? `mailto:${profile.email}` : null, label: 'Email' }
+      { icon: 'github', href: normalizeHref(profile.github), label: 'GitHub' },
+      { icon: 'linkedin', href: normalizeHref(profile.linkedin), label: 'LinkedIn' },
+      { icon: 'mail', href: normalizeHref(profile.email), label: 'Email', isEmail: true }
     ].filter(s => s.href);
 
     socialLinks.forEach(social => {
       const a = document.createElement('a');
-      a.href = social.href;
+      const href = social.isEmail
+        ? (social.href.startsWith('mailto:') ? social.href : `mailto:${social.href}`)
+        : social.href;
+      a.href = href;
       a.className = 'social-link';
       a.setAttribute('aria-label', social.label);
-      if (social.href.startsWith('http')) {
+      if (href.startsWith('http')) {
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
       }
@@ -496,7 +535,11 @@ function initProjects() {
     return;
   }
 
-  projectsContent.innerHTML = projects.map((project, i) => `
+  projectsContent.innerHTML = projects.map((project, i) => {
+    const githubHref = normalizeHref(project.github);
+    const liveHref = normalizeHref(project.live);
+
+    return `
     <div class="glass-hover card-shine card-lg animate-fade-up" style="animation-delay: ${i * 0.15}s; display: flex; flex-direction: column;">
       <div style="display: flex; align-items: start; justify-content: space-between; gap: 0.5rem; margin-bottom: 1.25rem;">
         <div style="display: flex; align-items: start; gap: 0.75rem; min-width: 0;">
@@ -512,10 +555,10 @@ function initProjects() {
         </div>
         
         <div style="display: flex; align-items: center; gap: 0.25rem; flex-shrink: 0;">
-          ${project.github ? `<a href="${project.github}" target="_blank" rel="noopener noreferrer" aria-label="Source code" style="display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 0.5rem; color: hsl(var(--muted-foreground)); border: 1px solid transparent; transition: all 0.2s ease; text-decoration: none;">
+          ${githubHref ? `<a href="${githubHref}" target="_blank" rel="noopener noreferrer" aria-label="Source code" style="display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 0.5rem; color: hsl(var(--muted-foreground)); border: 1px solid transparent; transition: all 0.2s ease; text-decoration: none;">
             ${getIconHTML('github', 'icon-sm')}
           </a>` : ''}
-          ${project.live ? `<a href="${project.live}" target="_blank" rel="noopener noreferrer" aria-label="Live demo" style="display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 0.5rem; color: hsl(var(--muted-foreground)); border: 1px solid transparent; transition: all 0.2s ease; text-decoration: none;">
+          ${liveHref ? `<a href="${liveHref}" target="_blank" rel="noopener noreferrer" aria-label="Live demo" style="display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 0.5rem; color: hsl(var(--muted-foreground)); border: 1px solid transparent; transition: all 0.2s ease; text-decoration: none;">
             ${getIconHTML('external-link', 'icon-sm')}
           </a>` : ''}
         </div>
@@ -540,7 +583,8 @@ function initProjects() {
         `).join('')}
       </div>` : ''}
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // ============================================
@@ -560,15 +604,39 @@ function initContact() {
   }
 
   const contactLinks = [
-    { icon: 'mail', label: 'Email', value: profile?.email, href: profile?.email ? `mailto:${profile.email}` : null },
-    { icon: 'phone', label: 'Phone', value: profile?.phone, href: profile?.phone ? `tel:${profile.phone}` : null },
-    { icon: 'github', label: 'GitHub', value: profile?.githubHandle, href: profile?.github },
-    { icon: 'linkedin', label: 'LinkedIn', value: profile?.linkedinHandle, href: profile?.linkedin }
+    {
+      icon: 'mail',
+      label: 'Email',
+      value: normalizeText(profile?.email),
+      href: normalizeHref(profile?.email),
+      type: 'email'
+    },
+    {
+      icon: 'phone',
+      label: 'Phone',
+      value: normalizeText(profile?.phone),
+      href: normalizeHref(profile?.phone),
+      type: 'phone'
+    },
+    {
+      icon: 'github',
+      label: 'GitHub',
+      value: normalizeText(profile?.githubHandle),
+      href: normalizeHref(profile?.github)
+    },
+    {
+      icon: 'linkedin',
+      label: 'LinkedIn',
+      value: normalizeText(profile?.linkedinHandle),
+      href: normalizeHref(profile?.linkedin)
+    }
   ].filter(link => link.value && link.href);
 
   let html = '';
 
-  if (profile?.email) {
+  const normalizedEmail = normalizeHref(profile?.email);
+
+  if (normalizedEmail) {
     html += `
       <div class="animate-fade-up" style="animation-delay: 0.1s; position: relative; border-radius: 1rem; border: 1px solid hsl(38 95% 58% / 0.2); background: linear-gradient(135deg, hsl(38 95% 58% / 0.08), hsl(38 95% 58% / 0.04), transparent); padding: 2rem; margin-bottom: 2rem; overflow: hidden;">
         <div style="position: absolute; top: 0; right: 0; width: 12rem; height: 12rem; background: hsl(38 95% 58% / 0.06); border-radius: 50%; filter: blur(60px); pointer-events: none;"></div>
@@ -582,7 +650,7 @@ function initContact() {
             <p style="color: hsl(var(--foreground)); font-family: 'Space Grotesk', sans-serif; font-weight: 500; font-size: 1.125rem; margin-bottom: 0.25rem;">Looking for internships & full-time roles</p>
             <p style="font-size: 0.875rem; color: hsl(var(--muted-foreground));">Full-Stack Development · React · Node.js · Next.js</p>
           </div>
-          <a href="mailto:${profile.email}" class="btn-primary" style="align-self: flex-start;">
+          <a href="${normalizedEmail.startsWith('mailto:') ? normalizedEmail : `mailto:${normalizedEmail}`}" class="btn-primary" style="align-self: flex-start;">
             Send email
             <i data-lucide="arrow-up-right" style="width: 0.875rem; height: 0.875rem;"></i>
           </a>
@@ -594,8 +662,15 @@ function initContact() {
   if (contactLinks.length > 0) {
     html += `
       <div class="grid-2" style="margin-bottom: 4rem;">
-        ${contactLinks.map((link, i) => `
-          <a href="${link.href}" ${link.href.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''} class="glass-hover card-shine animate-fade-up" style="animation-delay: ${i * 0.08}s; display: flex; align-items: center; gap: 1rem; padding: 1.25rem; border-radius: 1rem; text-decoration: none; transition: all 0.3s ease;">
+        ${contactLinks.map((link, i) => {
+          const resolvedHref = link.type === 'email'
+            ? (link.href.startsWith('mailto:') ? link.href : `mailto:${link.href}`)
+            : link.type === 'phone'
+              ? (link.href.startsWith('tel:') ? link.href : `tel:${link.href}`)
+              : link.href;
+
+          return `
+          <a href="${resolvedHref}" ${resolvedHref.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''} class="glass-hover card-shine animate-fade-up" style="animation-delay: ${i * 0.08}s; display: flex; align-items: center; gap: 1rem; padding: 1.25rem; border-radius: 1rem; text-decoration: none; transition: all 0.3s ease;">
             <div style="width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; background: hsl(38 95% 58% / 0.1); border: 1px solid hsl(38 95% 58% / 0.2); display: flex; align-items: center; justify-content: center; color: hsl(var(--primary)); flex-shrink: 0; transition: all 0.3s ease;">
               ${getIconHTML(link.icon)}
             </div>
@@ -605,10 +680,14 @@ function initContact() {
             </div>
             ${getIconHTML('arrow-up-right', 'icon-xs')}
           </a>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     `;
   }
+
+  const normalizedGithub = normalizeHref(profile?.github);
+  const normalizedLinkedin = normalizeHref(profile?.linkedin);
 
   html += `
     <div style="padding-top: 2rem; border-top: 1px solid hsl(var(--border) / 0.4); display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 1rem;">
@@ -616,18 +695,22 @@ function initContact() {
         © ${new Date().getFullYear()} ${profile?.name || 'Developer'} · Built with HTML, CSS & JavaScript
       </p>
       <div style="display: flex; align-items: center; gap: 1.25rem;">
-        ${profile?.github ? `<a href="${profile.github}" target="_blank" rel="noopener noreferrer" style="color: hsl(var(--muted-foreground) / 0.5); transition: color 0.3s ease;">
+        ${normalizedGithub ? `<a href="${normalizedGithub}" target="_blank" rel="noopener noreferrer" style="color: hsl(var(--muted-foreground) / 0.5); transition: color 0.3s ease;">
           ${getIconHTML('github', 'icon-sm')}
         </a>` : ''}
-        ${profile?.linkedin ? `<a href="${profile.linkedin}" target="_blank" rel="noopener noreferrer" style="color: hsl(var(--muted-foreground) / 0.5); transition: color 0.3s ease;">
+        ${normalizedLinkedin ? `<a href="${normalizedLinkedin}" target="_blank" rel="noopener noreferrer" style="color: hsl(var(--muted-foreground) / 0.5); transition: color 0.3s ease;">
           ${getIconHTML('linkedin', 'icon-sm')}
         </a>` : ''}
-        ${(profile?.github || profile?.linkedin) && codingProfiles && codingProfiles.length > 0 ? `<div style="width: 1px; height: 1rem; background: hsl(var(--border) / 0.4);"></div>` : ''}
-        ${codingProfiles ? codingProfiles.map(link => `
-          <a href="${link.href}" target="_blank" rel="noopener noreferrer" style="font-size: 0.75rem; color: hsl(var(--muted-foreground) / 0.5); text-decoration: none; transition: color 0.3s ease;">
-            ${link.label}
+        ${(normalizedGithub || normalizedLinkedin) && codingProfiles && codingProfiles.length > 0 ? `<div style="width: 1px; height: 1rem; background: hsl(var(--border) / 0.4);"></div>` : ''}
+        ${codingProfiles ? codingProfiles.map(link => {
+          const href = normalizeHref(link.href);
+          if (!href) return '';
+          return `
+          <a href="${href}" target="_blank" rel="noopener noreferrer" style="font-size: 0.75rem; color: hsl(var(--muted-foreground) / 0.5); text-decoration: none; transition: color 0.3s ease;">
+            ${normalizeText(link.label, 'Profile')}
           </a>
-        `).join('') : ''}
+        `;
+        }).join('') : ''}
       </div>
     </div>
   `;
